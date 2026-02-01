@@ -1,0 +1,119 @@
+const express = require("express");
+const Student = require("../models/student");
+const Course = require("../models/course")
+const mongoose = require("mongoose");
+const Enroll = require("../models/enroll");
+const router = express.Router();
+
+router.get("/students", (req, res) => {
+    return res.render("home");
+});
+router.post("/students", async(req, res) => {
+    const { id, name, email} = req.body;
+    const student = await Student.create({
+        id,
+        name, 
+        email
+    })
+    return res.redirect("/allcourses");
+
+});
+router.get("/courses", (req, res) => {
+    return res.render("course");
+});
+router.post("/courses", async(req, res) => {
+    const { id, title, capacity, enrolledCount } = req.body;
+    const course = await Course.create({
+        id,
+        title, 
+        capacity,
+        enrolledCount,
+    })
+    return res.render("success");
+});
+router.get("/allcourses", async(req, res) => {
+    const courses = await Course.find({});
+    return res.render("allcourse", {
+        courses
+    });
+});
+router.post("/enroll", async (req, res) => {
+    const { studentId, courseId } = req.body;
+    const student = await Student.findOne({ id: studentId });
+    if(!student){
+      return res.status(404).send("Student not found");
+    }
+    const course = await Course.findOne({ id: courseId });
+    if(!course){
+      return res.status(404).send("Course not found");
+    }
+    const alreadyEnrolled = await Enroll.findOne({ studentId, courseId });
+    if(alreadyEnrolled){
+      return res.status(400).send("Student already enrolled in this course");
+    }
+    if(course.enrolledCount >= course.capacity){
+      return res.status(400).send("Course is full");
+    }
+    await Enroll.create({
+      courseName: course.title,
+      studentName: student.name,
+      courseId,
+      studentId,
+    });
+    await Course.findOneAndUpdate(
+      { id: courseId },
+      { $inc: { enrolledCount: 1 } },
+      { new: true }
+    );
+    return res.redirect("/allcourses");
+});
+router.get("/students/:id/courses", async (req, res) => {
+    const studentId = req.params.id;
+    const courses = await Enroll.find(
+        { studentId: studentId }
+    );
+    res.render("enrollcourse", { 
+        courses 
+    });
+});
+
+router.get("/courses/:id/students", async(req, res) => {
+    const courseId = req.params.id;
+    const students = await Enroll.find(
+        { courseId: courseId }
+    );
+    return res.render("enrollstudent", {
+        students
+    });
+});
+router.get("/allenroll", async(req, res) => {
+    const allEnroll = await Enroll.find({});
+    return res.render("allenroll", {
+        allEnroll,
+    })
+});
+router.post("/unenroll", async(req, res) => {
+    const { id, _id } = req.body;
+    const course =  await Course.findOneAndUpdate(
+        { id: id},
+        {$inc: {enrolledCount: -1}},
+        { new: true},
+    );
+    const enroll = await Enroll.findByIdAndDelete({_id});
+    return res.redirect("/allenroll");
+});
+
+
+module.exports = router;
+
+
+
+// Requirements
+// 1. POST/students: Create a new student.
+// 2. POST/courses: Create a new course with a capacity limit.
+// 3. POST/enroll: Enroll a student in a course.
+// Reject if enrolledCount >= capacity.
+// Increment enrolledCount on success.
+// 4. GET/students/:id/courses: List all courses a student is enrolled in.
+// 5. GET/courses/:id/students: List all students in a course.
+// 6. DELETE /unenroll: Remove a student from a course and decrement enrolled Count
